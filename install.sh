@@ -30,7 +30,8 @@ else
     macos)
       if command -v brew >/dev/null 2>&1; then
         # 注意：不要用 node@22 —— 它是 keg-only，不会 symlink 进 PATH，装完 command -v node 仍然找不到
-        echo "正在用 Homebrew 安装 Node…"; brew install node
+        # 加 || true：set -e 下 brew 任何非零返回（哪怕只是警告）都会让脚本静默退出，成败交给下面的 command -v node 判断
+        echo "正在用 Homebrew 安装 Node…"; brew install node || true
       else
         echo -e "请先安装 Homebrew（${B}https://brew.sh${D}），或直接下载 Node LTS 安装包：${B}https://nodejs.org${D}"
         exit 1
@@ -46,7 +47,16 @@ else
       echo -e "请按你的发行版安装 Node 22+（${B}https://nodejs.org${D} 下载，或用包管理器）。装好后重跑本脚本。"
       exit 1 ;;
   esac
-  command -v node >/dev/null 2>&1 || { echo -e "${R}✖ Node 安装失败${D}"; exit 1; }
+  if ! command -v node >/dev/null 2>&1; then
+    echo -e "${R}✖ Node 装好了但这个 shell 找不到它${D}"
+    echo -e "  多半是 PATH 问题，不是 Node 没装上。诊断信息："
+    echo -e "    brew:        $(command -v brew 2>/dev/null || echo 找不到)"
+    echo -e "    期望 node:   $(brew --prefix 2>/dev/null)/bin/node"
+    echo -e "    是否存在:    $([ -x "$(brew --prefix 2>/dev/null)/bin/node" ] && echo 是 || echo 否)"
+    echo -e "    PATH:        $PATH"
+    echo -e "  最快解决：${B}关掉这个窗口，重新开一个${D}，再跑一次。"
+    exit 1
+  fi
   echo -e "${G}✔${D} Node $(node -v) 就绪"
 fi
 
