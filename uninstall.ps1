@@ -133,7 +133,11 @@ if (Has 8) {
     if ($nodeWinget) { Write-Host "  - 卸载 Node.js $nodeVer —— 这台机器上其它依赖 Node 的项目会失效" -ForegroundColor Red }
     elseif ($nodeDesc -ne "未安装") { Write-Host "  - Node.js 不是 winget 装的，脚本不动它，结束时给你手工步骤" -ForegroundColor Yellow }
 }
-if (Has 9) { Write-Host "  - 清空 npm 下载缓存（$npmCache）与日志" }
+if (Has 9) { Write-Host "  - 清空 npm 下载缓存（$npmCache）与日志，并删除缓存目录" }
+if ((Has 4) -or (Has 3)) {
+    $csPre = Join-Path $env:USERPROFILE ".config\configstore\update-notifier-omniroute.json"
+    if (Test-Path $csPre) { Write-Host "  - 删除更新检查记录 $csPre" }
+}
 Write-Host ""
 
 if (((Has 2) -or (Has 3) -or (Has 4)) -and ((Test-Path $cfgPath) -or (Test-Path $memDir))) {
@@ -211,6 +215,17 @@ if (Has 9) {
     }
     $npmLogs = Join-Path $env:APPDATA "npm-cache\_logs"
     if (Test-Path $npmLogs) { try { Remove-Item "$npmLogs\*.log" -Force -ErrorAction SilentlyContinue; Write-Host "  已删除 npm 日志" } catch {} }
+    $npmDir = Join-Path $env:APPDATA "npm-cache"
+    if (Test-Path $npmDir) { try { Remove-Item $npmDir -Recurse -Force -ErrorAction SilentlyContinue; Write-Host "  已删除 npm 缓存目录" } catch {} }
+}
+
+# omniroute 用 update-notifier 把更新检查记录写在 configstore 下，跟安装目录不在一起
+if ((Has 4) -or (Has 3)) {
+    $cs = Join-Path $env:USERPROFILE ".config\configstore\update-notifier-omniroute.json"
+    if (Test-Path $cs) {
+        Write-Host "> 清理更新检查记录…" -ForegroundColor Cyan
+        try { Remove-Item $cs -Force -ErrorAction Stop; Write-Host "  已删除 $cs" } catch {}
+    }
 }
 
 if ((Has 8) -and $nodeWinget) {

@@ -162,7 +162,10 @@ if has 8; then
     echo -e "  ${Y}• Node.js 不是 brew 装的，脚本不动它，结束时给你手工步骤${D}"
   fi
 fi
-has 9 && echo -e "  • 清空 npm 下载缓存（${NPM_CACHE}）与日志（${NPM_LOGS}）"
+has 9 && echo -e "  • 清空 npm 下载缓存（${NPM_CACHE}）与日志（${NPM_LOGS}），并删除 ~/.npm 目录"
+if has 4 || has 3; then
+  [ -f "$HOME/.config/configstore/update-notifier-omniroute.json" ] && echo -e "  • 删除更新检查记录 ~/.config/configstore/update-notifier-omniroute.json"
+fi
 echo
 
 # 涉及不可恢复的内容就先问备份
@@ -252,6 +255,19 @@ if has 9; then
   if [ -d "$HOME/.npm/_logs" ]; then
     rm -f "$HOME/.npm/_logs"/*.log 2>/dev/null && echo "  已删除 npm 日志"
   fi
+  # npm 用户目录：缓存清空后这个空壳也没用了
+  if [ -d "$HOME/.npm" ]; then
+    rm -rf "$HOME/.npm" 2>/dev/null && echo "  已删除 $HOME/.npm"
+  fi
+fi
+
+# omniroute 用 update-notifier 把更新检查记录写在 configstore 下，跟安装目录不在一起
+if has 4 || has 3; then
+  CS="$HOME/.config/configstore/update-notifier-omniroute.json"
+  if [ -f "$CS" ]; then
+    echo -e "${B}› 清理更新检查记录…${D}"
+    rm -f "$CS" 2>/dev/null && echo "  已删除 $CS"
+  fi
 fi
 
 if has 8 && [ "$NODE_BREW" = "1" ]; then
@@ -288,6 +304,23 @@ if has 4 && [ "$DIR" != "$DEFDIR" ] && [ -d "$DEFDIR" ]; then
   if [ "${rmdef:-}" = "y" ] || [ "${rmdef:-}" = "Y" ]; then
     rm -rf "$DEFDIR" && echo "  已删除 $DEFDIR" || echo -e "  ${R}✖ 删除失败${D}"
   else echo "  已保留 $DEFDIR"; fi
+fi
+
+# 脚本自己为 .bashrc/.zshrc 做的备份，卸载完就没用了；但它是保护性备份，不静默删
+BAKS=""
+for f in "$HOME/.bashrc.omni-bak" "$HOME/.zshrc.omni-bak"; do
+  [ -f "$f" ] && BAKS="$BAKS $f"
+done
+if [ -n "$BAKS" ] && has 6; then
+  echo
+  echo -e "  ${Y}卸载时为你的 shell 配置留了备份：${D}"
+  for f in $BAKS; do echo "    $f"; done
+  read -r -p "  这些备份还要吗？[y=保留 / 回车=删掉]: " kb
+  if [ "${kb:-}" != "y" ] && [ "${kb:-}" != "Y" ]; then
+    rm -f $BAKS 2>/dev/null && echo "  已删除备份"
+  else
+    echo "  已保留"
+  fi
 fi
 
 echo
