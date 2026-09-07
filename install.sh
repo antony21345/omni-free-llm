@@ -31,7 +31,14 @@ else
       if command -v brew >/dev/null 2>&1; then
         # 注意：不要用 node@22 —— 它是 keg-only，不会 symlink 进 PATH，装完 command -v node 仍然找不到
         # 加 || true：set -e 下 brew 任何非零返回（哪怕只是警告）都会让脚本静默退出，成败交给下面的 command -v node 判断
-        echo "正在用 Homebrew 安装 Node…"; brew install node || true
+        # Homebrew 6.0 起「安装前询问确认」成了默认行为，会弹一句英文的
+        # "Do you want to proceed with the installation? [y/n]"。它只在真实终端出现
+        # （ask.rb 里 !$stdin.tty? 时直接返回），所以管道跑的自动化测试永远看不到它。
+        # 上面已用中文说明在装什么，不需要它再问一遍；老版本 brew 没这个选项，先探测。
+        BREW_NOASK=""
+        brew install --help 2>/dev/null | grep -q -- '--no-ask' && BREW_NOASK="--no-ask"
+        echo "正在用 Homebrew 安装 Node（首次需下载，约 1-3 分钟，中途不需要你操作）…"
+        brew install $BREW_NOASK node || true
       else
         echo -e "请先安装 Homebrew（${B}https://brew.sh${D}），或直接下载 Node LTS 安装包：${B}https://nodejs.org${D}"
         exit 1

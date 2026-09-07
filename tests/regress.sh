@@ -205,6 +205,12 @@ else
 fi
 grep -q 'hash -r' uninstall.sh && ok "卸载 node 后清了 bash 的命令哈希表" || no "没有 hash -r"
 
+echo "[7f] 不让第三方工具的英文交互提示冒出来"
+# Homebrew 6.0 起安装前会问一句英文 y/n（仅在真终端出现，管道测试看不到），
+# 我们的脚本已经用中文说明了，不该再让它问。
+grep -q 'no-ask' install.sh && ok "install.sh 关掉了 brew 的英文确认提示" || no "brew 会弹英文 y/n 提示"
+grep -q "grep -q -- '--no-ask'" install.sh && ok "先探测再用（兼容老版本 brew）" || no "没做版本探测，老 brew 会报错"
+
 echo "[8] 真正执行删除的路径（HOME 与 PATH 都隔离，不碰真实环境）"
 D="$(mktemp -d)"; H="$(mktemp -d)"
 mkdir -p "$D/memory"
