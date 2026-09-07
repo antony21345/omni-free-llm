@@ -195,6 +195,16 @@ for f in install.command uninstall.command; do
   grep -q '关闭本窗口' "$f" && no "$f 承诺了「关闭本窗口」，但脚本做不到" || ok "$f 没有承诺关闭窗口"
 done
 
+echo "[7e] 判断命令是否存在，不能只靠 command -v"
+# bash 把执行过的命令路径记进 hash 表，文件删了 command -v 仍返回旧路径（实测确认）。
+# 卸载 node 之后判断"node 还在不在"必须看文件。
+if grep -A3 'lib/node_modules/npm' uninstall.sh | grep -q '! -x .*bin/node'; then
+  ok "npm 残留判断用的是文件检查"
+else
+  no "npm 残留判断仍在用 command -v（会被 hash 缓存骗到）"
+fi
+grep -q 'hash -r' uninstall.sh && ok "卸载 node 后清了 bash 的命令哈希表" || no "没有 hash -r"
+
 echo "[8] 真正执行删除的路径（HOME 与 PATH 都隔离，不碰真实环境）"
 D="$(mktemp -d)"; H="$(mktemp -d)"
 mkdir -p "$D/memory"

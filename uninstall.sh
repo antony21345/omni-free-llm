@@ -326,7 +326,11 @@ fi
 # 这些都是装 node 带进来的，跟着第 8 项一起清；Homebrew 本身仍然不动。
 if has 8 && command -v brew >/dev/null 2>&1; then
   BP=$(brew --prefix 2>/dev/null)
-  if [ -n "${BP:-}" ] && [ -d "$BP/lib/node_modules/npm" ] && ! command -v node >/dev/null 2>&1; then
+  # 不能用 command -v node 判断：bash 会把执行过的命令路径记进 hash 表，
+  # 前面调过 `node omni.mjs down`，即使文件已删，command -v 仍返回旧路径（实测确认）。
+  # 直接看文件在不在，最可靠。
+  hash -r 2>/dev/null || true
+  if [ -n "${BP:-}" ] && [ -d "$BP/lib/node_modules/npm" ] && [ ! -x "$BP/bin/node" ]; then
     rm -rf "$BP/lib/node_modules/npm" 2>/dev/null && echo "  已删除 node 卸载后残留的 npm 目录"
   fi
   BREWCACHE=$(du -sh "$(brew --cache 2>/dev/null)" 2>/dev/null | cut -f1 | tr -d " ")
