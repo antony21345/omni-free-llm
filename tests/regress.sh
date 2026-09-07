@@ -189,6 +189,12 @@ printf 'a\nyes\n\n' | HOME="$HD" PATH=/usr/bin:/bin bash uninstall.sh >/dev/null
 [ -f "$HD/.bashrc" ] && ok "空文件但无 .omni-bak 时不碰（不误删无关文件）" || no "误删了与本工具无关的空文件！"
 rm -rf "$HD" 2>/dev/null
 
+echo "[7d] 不承诺脚本做不到的事"
+for f in install.command uninstall.command; do
+  # 窗口关闭由终端设置决定，脚本控制不了，提示语不能这么写
+  grep -q '关闭本窗口' "$f" && no "$f 承诺了「关闭本窗口」，但脚本做不到" || ok "$f 没有承诺关闭窗口"
+done
+
 echo "[8] 真正执行删除的路径（HOME 与 PATH 都隔离，不碰真实环境）"
 D="$(mktemp -d)"; H="$(mktemp -d)"
 mkdir -p "$D/memory"
