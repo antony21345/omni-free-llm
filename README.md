@@ -204,7 +204,6 @@ model    = auto
   - Windows：安装器会生成 `omni.cmd` 并把安装目录写进**用户级 PATH**，需要**重开一个 cmd 窗口**才生效。仍然不行就用全路径：`node "%USERPROFILE%\.omniroute\omni.mjs" chat`。
   - macOS / Linux：重开终端，或执行 `source ~/.bashrc`。
 - **装好了但不知道怎么开始对话？** 运行 `omni chat`（不带参数），出现 `❯` 提示符就是会话模式，输入 `:q` 退出。
-- **GitHub push 失败 / connector 报 403？** WorkBuddy 的 GitHub 连接器（OAuth App）没有仓库读写权限，请用一个 Personal Access Token（Fine-grained, Contents: Read and write）直接调 GitHub API。
 
 ## 十、免责声明
 
