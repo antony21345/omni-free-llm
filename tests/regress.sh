@@ -98,6 +98,8 @@ ALLSEL=$(printf 'a\nn\nno\n' | bash uninstall.sh "$T" 2>&1)
 echo "$ALLSEL" | grep -q "卸载 Node.js" && ok "a 全选时包含 Node" || no "a 全选未包含 Node"
 echo "$ALLSEL" | grep -q "已取消" && ok "a 全选后仍可取消" || no "a 全选后取消失效"
 [ -f "$T/config.json" ] && ok "a 全选取消后文件未动" || no "a 全选取消后文件被删"
+printf 'a\nn\ny\n' | bash uninstall.sh "$T" 2>&1 | grep -q "需要完整的小写" && ok "输 y 会提示需要完整 yes" || no "输 y 时没有提示原因"
+[ -f "$T/config.json" ] && ok "输 y 之后文件仍未动" || no "输 y 竟然执行了删除"
 
 echo
 echo "通过 $PASS 项，失败 $FAIL 项"

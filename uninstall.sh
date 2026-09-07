@@ -141,7 +141,7 @@ echo
 # 涉及不可恢复的内容就先问备份
 if has 2 || has 3 || has 4; then
   if [ -f "$DIR/config.json" ] || [ -d "$DIR/memory" ]; then
-    read -r -p "先把 config.json 和对话记忆备份一份再删？(Y/n)：" bk
+    read -r -p "先把 config.json 和对话记忆备份一份再删？[回车或 Y=备份 / n=不备份]：" bk
     if [ "${bk:-}" != "n" ] && [ "${bk:-}" != "N" ]; then
       BKDIR="$HOME/Desktop"; [ -d "$BKDIR" ] || BKDIR="$HOME"
       TS=$(date +%Y%m%d-%H%M%S)
@@ -160,8 +160,15 @@ if has 2 || has 3 || has 4; then
   fi
 fi
 
-read -r -p "确认执行？输入 yes 继续（其它任何内容都会取消）：" ans
-if [ "${ans:-}" != "yes" ]; then echo -e "${G}已取消，什么都没有改动。${D}"; exit 0; fi
+echo -e "${BD}${R}最后一步：请完整输入小写的 yes（三个字母）才会真正执行。${D}"
+read -r -p "确认执行？[输入 yes 执行 / 其它任何内容取消]：" ans
+if [ "${ans:-}" != "yes" ]; then
+  case "${ans:-}" in
+    y|Y|Yes|YES|yES|yeS|YEs|yEs) echo -e "${Y}⚠ 你输入的是「${ans}」，需要完整的小写 ${BD}yes${D}${Y} 才会执行。${D}" ;;
+  esac
+  echo -e "${G}已取消，什么都没有改动。${D}"
+  exit 0
+fi
 echo
 
 if has 1 || has 4 || has 5; then
