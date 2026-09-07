@@ -78,7 +78,20 @@ if [ "$NODE_BREW" = "1" ]; then
 elif [ "$NODE_DESC" != "未安装" ]; then
   echo -e "  ${G}8${D}  Node.js（${NODE_DESC}）                        ${Y}不是 brew 装的，只能给你手工步骤${D}"
 else
-  echo -e "  ${G}8${D}  Node.js                                 （未安装，跳过）"
+  # node 已经不在了，但 brew 目录里可能还留着 npm 和下载的 bottle —— 别让菜单写「跳过」把人劝退
+  LEFTOVER=""
+  if command -v brew >/dev/null 2>&1; then
+    BP0=$(brew --prefix 2>/dev/null)
+    NPMLEFT=""; [ -d "${BP0:-/nonexistent}/lib/node_modules/npm" ] && NPMLEFT=$(du -sh "$BP0/lib/node_modules/npm" 2>/dev/null | cut -f1 | tr -d " ")
+    CACHELEFT=$(du -sh "$(brew --cache 2>/dev/null)" 2>/dev/null | cut -f1 | tr -d " ")
+    [ -n "$NPMLEFT" ] && LEFTOVER="npm 残留 $NPMLEFT"
+    [ -n "${CACHELEFT:-}" ] && LEFTOVER="${LEFTOVER:+$LEFTOVER + }下载缓存 $CACHELEFT"
+  fi
+  if [ -n "$LEFTOVER" ]; then
+    echo -e "  ${G}8${D}  Node 已不在，但 brew 里还有残留         $LEFTOVER   ${Y}选它可清掉${D}"
+  else
+    echo -e "  ${G}8${D}  Node.js                                 （未安装且无残留，跳过）"
+  fi
 fi
 echo -e "  ${G}9${D}  npm 下载缓存与日志                      缓存 $NPM_CACHE / 日志 $NPM_LOGS   ${G}可重新下载${D}"
 echo
@@ -158,6 +171,7 @@ has 7 && echo -e "  • 删除 Docker 容器 omniroute（镜像会再问一次�
 if has 8; then
   if [ "$NODE_BREW" = "1" ]; then
     echo -e "  ${R}• 卸载 Node.js 及其 ${NODE_DEPS:-0} 个 brew 依赖（${NODE_ALL:-$NODE_SIZE}）—— 这台机器上其它依赖 Node 的项目会失效${D}"
+    echo -e "  • 顺带清掉 node 留下的 npm 目录和 Homebrew 下载缓存（Homebrew 本身不动）"
   elif [ "$NODE_DESC" != "未安装" ]; then
     echo -e "  ${Y}• Node.js 不是 brew 装的，脚本不动它，结束时给你手工步骤${D}"
   fi
@@ -278,6 +292,19 @@ if has 8 && [ "$NODE_BREW" = "1" ]; then
   else
     brew uninstall node >/dev/null 2>&1 && echo "  已卸载 node" || echo -e "  ${Y}⚠ node 卸载失败${D}"
     brew autoremove >/dev/null 2>&1 && echo "  已用 brew autoremove 清掉不再被依赖的连带包" || true
+  fi
+fi
+
+# 卸载 node 之后 brew 目录里的两处残留：npm 自己的目录，和下载的 bottle 缓存。
+# 这些都是装 node 带进来的，跟着第 8 项一起清；Homebrew 本身仍然不动。
+if has 8 && command -v brew >/dev/null 2>&1; then
+  BP=$(brew --prefix 2>/dev/null)
+  if [ -n "${BP:-}" ] && [ -d "$BP/lib/node_modules/npm" ] && ! command -v node >/dev/null 2>&1; then
+    rm -rf "$BP/lib/node_modules/npm" 2>/dev/null && echo "  已删除 node 卸载后残留的 npm 目录"
+  fi
+  BREWCACHE=$(du -sh "$(brew --cache 2>/dev/null)" 2>/dev/null | cut -f1 | tr -d " ")
+  if [ -n "${BREWCACHE:-}" ]; then
+    brew cleanup --prune=all >/dev/null 2>&1 && echo "  已清理 Homebrew 下载缓存（原 ${BREWCACHE}）" || true
   fi
 fi
 

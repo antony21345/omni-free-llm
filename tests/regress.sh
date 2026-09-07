@@ -112,7 +112,8 @@ ALLSEL=$(printf 'a\nn\nno\n' | bash uninstall.sh "$T" 2>&1)
 if [ "$HAVE_NODE" = "1" ]; then
   echo "$ALLSEL" | grep -q "卸载 Node.js" && ok "a 全选时包含 Node" || no "a 全选未包含 Node"
 else
-  echo "$ALLSEL" | grep -q "未安装，跳过" && ok "Node 未安装时菜单标注跳过" || no "Node 未安装时菜单标注有误"
+  # Node 不在时，菜单要么说明 brew 里还有残留可清，要么说明确实没什么可删 —— 不能笼统写「跳过」把人劝退
+  echo "$ALLSEL" | grep -qE "brew 里还有残留|未安装且无残留" && ok "Node 未安装时菜单标注正确" || no "Node 未安装时菜单标注有误"
 fi
 echo "$ALLSEL" | grep -q "已取消" && ok "a 全选后仍可取消" || no "a 全选后取消失效"
 [ -f "$T/config.json" ] && ok "a 全选取消后文件未动" || no "a 全选取消后文件被删"
