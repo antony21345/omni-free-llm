@@ -3,7 +3,9 @@
 # 不会删除：Node.js / Homebrew / Docker 本身 —— 其它项目可能在用
 set -u
 
-G='\033[32m'; B='\033[36m'; Y='\033[33m'; R='\033[31m'; D='\033[0m'; BD='\033[1m'
+# 用 $'...' 而不是 '...'：这样 \033 在赋值时就成了真正的 ESC 字符。
+# read -p 的提示语不会解释转义序列，用普通单引号的话会把 \033[1m 原样吐给用户看。
+G=$'\033[32m'; B=$'\033[36m'; Y=$'\033[33m'; R=$'\033[31m'; D=$'\033[0m'; BD=$'\033[1m'
 
 DIR="${OMNI_DIR:-$HOME/.omniroute}"
 [ $# -ge 1 ] && [ -n "${1:-}" ] && DIR="$1"
@@ -83,7 +85,14 @@ echo
 echo -e "${G}脚本不会自动删除：${D}Homebrew 本身 —— 它不是这个安装器装的（装它的时间早得多）。"
 echo -e "  选了 8 之后，卸载 Homebrew 的官方命令会在结束时打印给你，由你决定跑不跑。"
 echo
-read -r -p "输入要删除的编号（如 2 5 或 2,5）；${BD}a=一键全删（1-9，含 Node）${D}；直接回车取消：" SEL
+# 说明用 echo -e 打印（颜色能正常渲染），read 的提示语只留纯文本 ——
+# read -p 不解释转义序列，也不是所有终端都吃 ANSI，提示语里放颜色码会变成乱码。
+echo -e "  选择方式："
+echo -e "    · 删指定项：输入编号，多个用空格或逗号分隔，例如  ${BD}2 5${D}  或  ${BD}2,5${D}"
+echo -e "    · 一键全删：输入一个字母  ${BD}a${D}   （等于选中 1-9 全部，含 Node.js）"
+echo -e "    · 取消退出：直接按回车"
+echo
+read -r -p "你的选择: " SEL
 RAW="${SEL:-}"
 [ -z "$(echo "${SEL:-}" | tr -d ' ')" ] && { echo -e "${G}已取消，什么都没有改动。${D}"; exit 0; }
 # 逗号、全角逗号、顿号、分号都当分隔符 —— 别让分隔符写法不同就静默什么都不做
@@ -159,8 +168,8 @@ echo
 # 涉及不可恢复的内容就先问备份
 if has 2 || has 3 || has 4; then
   if [ -f "$DIR/config.json" ] || [ -d "$DIR/memory" ]; then
-    read -r -p "先把 config.json 和对话记忆备份一份再删？[回车或 Y=备份 / n=不备份]：" bk
-    if [ "${bk:-}" != "n" ] && [ "${bk:-}" != "N" ]; then
+    read -r -p "要先备份 config.json 和对话记忆吗？[y=备份 / 回车=不备份，直接删]: " bk
+    if [ "${bk:-}" = "y" ] || [ "${bk:-}" = "Y" ]; then
       BKDIR="$HOME/Desktop"; [ -d "$BKDIR" ] || BKDIR="$HOME"
       TS=$(date +%Y%m%d-%H%M%S)
       if [ -f "$DIR/config.json" ]; then

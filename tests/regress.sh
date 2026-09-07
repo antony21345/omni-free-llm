@@ -8,10 +8,16 @@ PASS=0; FAIL=0
 ok(){ PASS=$((PASS+1)); echo "  ok   $1"; }
 no(){ FAIL=$((FAIL+1)); echo "  FAIL $1"; }
 
-command -v node >/dev/null || { echo "需要 Node 才能跑测试：https://nodejs.org"; exit 1; }
+# 缺 Node 时不整体失败：静态检查（语法/行尾/BOM/权限/提示语）照跑，只跳过需要 Node 的部分
+HAVE_NODE=0; command -v node >/dev/null 2>&1 && HAVE_NODE=1
+[ "$HAVE_NODE" = "0" ] && echo "注意：本机没有 Node，[4] 和 [5] 需要 Node 的检查将跳过"
 
 echo "[1] 语法检查"
-node --check install.mjs 2>/dev/null && ok "install.mjs" || no "install.mjs"
+if [ "$HAVE_NODE" = "1" ]; then
+  node --check install.mjs 2>/dev/null && ok "install.mjs" || no "install.mjs"
+else
+  ok "（跳过 install.mjs 语法检查，需要 Node）"
+fi
 for f in install.sh install.command uninstall.sh uninstall.command tests/regress.sh; do
   bash -n "$f" 2>/dev/null && ok "$f" || no "$f"
 done
@@ -32,6 +38,9 @@ for f in install.command uninstall.command install.sh uninstall.sh; do
   [ -x "$f" ] && ok "$f 可执行" || no "$f 缺 x 权限"
 done
 
+if [ "$HAVE_NODE" = "0" ]; then
+  echo "[4][5] 跳过（需要 Node）"
+else
 echo "[4] 从 install.mjs 生成运行时脚本"
 node -e "
 const fs=require('fs');
@@ -80,8 +89,13 @@ OMNI_DIR="$T" node "$T/omni.mjs" memory search 冒烟 2>&1 | grep -q "冒烟" &&
 OMNI_DIR="$T" node "$T/omni.mjs" status 2>&1 | grep -q "base_url" && ok "omni status" || no "omni status 失败"
 OMNI_DIR="$T" node "$T/omni.mjs" editor 2>&1 | grep -q "base_url" && ok "omni editor" || no "omni editor 失败"
 kill $MOCKPID 2>/dev/null; wait $MOCKPID 2>/dev/null
+fi
 
 echo "[6] 卸载脚本安全性"
+# 自备数据：[5] 在缺 Node 时会被跳过，不能依赖它创建的文件
+mkdir -p "$T/memory"
+[ -f "$T/config.json" ] || printf '{"port":20999}\n' > "$T/config.json"
+[ -f "$T/memory/index.json" ] || printf '{"items":[]}\n' > "$T/memory/index.json"
 B=$(ls -a "$T" | wc -l)
 printf '2 3\nn\nno\n' | bash uninstall.sh "$T" >/dev/null 2>&1
 A=$(ls -a "$T" | wc -l)
@@ -95,7 +109,11 @@ echo "$MENU" | grep -q "npm 下载缓存" && ok "菜单含 npm 缓存选项" || 
 echo "$MENU" | grep -q "Homebrew 本身" && ok "菜单说明 Homebrew 不自动删" || no "缺 Homebrew 说明"
 echo "$MENU" | grep -qE '\$[A-Za-z_]' && no "菜单里有未展开的变量（变量边界问题）" || ok "菜单无未展开变量"
 ALLSEL=$(printf 'a\nn\nno\n' | bash uninstall.sh "$T" 2>&1)
-echo "$ALLSEL" | grep -q "卸载 Node.js" && ok "a 全选时包含 Node" || no "a 全选未包含 Node"
+if [ "$HAVE_NODE" = "1" ]; then
+  echo "$ALLSEL" | grep -q "卸载 Node.js" && ok "a 全选时包含 Node" || no "a 全选未包含 Node"
+else
+  echo "$ALLSEL" | grep -q "未安装，跳过" && ok "Node 未安装时菜单标注跳过" || no "Node 未安装时菜单标注有误"
+fi
 echo "$ALLSEL" | grep -q "已取消" && ok "a 全选后仍可取消" || no "a 全选后取消失效"
 [ -f "$T/config.json" ] && ok "a 全选取消后文件未动" || no "a 全选取消后文件被删"
 printf 'a\nn\ny\n' | bash uninstall.sh "$T" 2>&1 | grep -q "需要完整的小写" && ok "输 y 会提示需要完整 yes" || no "输 y 时没有提示原因"
@@ -109,6 +127,27 @@ printf 'a\nn\nno\n' | bash uninstall.sh "$T" 2>&1 | noansi | grep -q "已识别�
 BADOUT=$(printf 'abc\n' | bash uninstall.sh "$T" 2>&1); BADRC=$?
 echo "$BADOUT" | grep -q "没识别出任何有效编号" && ok "无效输入会明确报错" || no "无效输入被静默接受"
 [ "$BADRC" != "0" ] && ok "无效输入以非零码退出" || no "无效输入却返回成功"
+
+echo "[7b] 交互提示语不能吐出转义序列（只在真人终端可见，靠静态断言兜住）"
+for f in uninstall.sh install.sh; do
+  # 颜色变量必须用 $'...' 定义，普通单引号里的 \033 是字面字符，read -p 不会解释它
+  if grep -qE "^[A-Z]+='\\\\033" "$f"; then no "$f 颜色变量用了普通单引号（read -p 会吐出 \\033）"; else ok "$f 颜色变量定义正确"; fi
+  # read 的提示语里不许出现颜色变量
+  if grep 'read -r -p' "$f" 2>/dev/null | grep -qE '\$\{(G|B|Y|R|D|BD)\}'; then no "$f 的 read 提示语含颜色变量"; else ok "$f 的 read 提示语是纯文本"; fi
+done
+if command -v expect >/dev/null 2>&1; then
+  cat > "$T/p.exp" <<EXPEOF
+set timeout 10
+spawn bash $ROOT/uninstall.sh $T
+expect "你的选择"
+send "\r"
+expect eof
+EXPEOF
+  POUT=$(LC_ALL=C expect "$T/p.exp" 2>&1)
+  echo "$POUT" | grep -q '\\033' && no "真实终端下提示语吐出了字面 \\033" || ok "真实终端下提示语无字面转义序列"
+else
+  ok "（无 expect，跳过 TTY 渲染检查）"
+fi
 
 echo "[8] 真正执行删除的路径（HOME 与 PATH 都隔离，不碰真实环境）"
 D="$(mktemp -d)"; H="$(mktemp -d)"
