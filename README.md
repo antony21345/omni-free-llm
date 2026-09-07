@@ -1,6 +1,25 @@
-# omni-free-llm —— 免费 AI 对话，跨平台一键安装
+# omni-free-llm —— 免费 AI 对话，一键装好
+
+装完就能在自己电脑上免费和 AI 聊天。**不用注册账号、不用付订阅费、不用会命令行**。
+
+**怎么装**：解压后，Windows 双击 `install.bat`，macOS 双击 `install.command`，Linux 把 `install.sh` 拖进终端回车。剩下的它自己搞定——电脑上没装过任何开发环境也行，需要的东西它会自动装好。全程只要回答几个选择题，一路回车就行。
+
+**装完怎么用**：终端里敲 `omni chat` 就进入对话。回答像聊天一样一个字一个字出来，重点词加粗、代码变色，每次还会告诉你花了多久、用了多少 token。它记得上文，可以连着追问。
+
+**要花多少代价**：下载约 116MB，装完占约 2.3GB 硬盘，耗时 5–15 分钟。装之前会先检查硬盘够不够。
+
+**老实说的缺点**：默认用的是「匿名免费池」——不用注册，但慢（问个简单问题实测约 18 秒），偶尔限流。想快就花 1 分钟去 [Groq](https://console.groq.com/keys) 或[智谱](https://open.bigmodel.cn)注册个免费 key（不要信用卡），敲一句 `omni key groq 你的key` 接进去，速度立刻正常。额度用完时它会明说「额度已用完，约 2.5 小时后恢复」，而不是甩一个看不懂的报错。
+
+**不想要了**：双击 `uninstall.command`（Windows 是 `uninstall.bat`），它会列出每样东西占多大、删了能不能恢复，你自己勾选；输入 `a` 就是全删。删前会问要不要备份聊天记录，删完不留垃圾——连它当初为了运行而装的 Node.js 都会一起清掉。
+
+<details>
+<summary><b>技术说明</b>（想知道底层是什么的话点开）</summary>
 
 把 [oMNIROUTE](https://github.com/diegosouzapw/OmniRoute)（免费 MIT AI 网关）打包成**跨平台、交互式、零私钥、傻瓜式**的一键安装器。全新电脑也能装，装完终端直接免费对话，还能一键接入任意 OpenAI 兼容的编辑器 / CLI。
+
+安装器负责：检测并按需安装 Node、通过 npm 装 omniroute、以 `omniroute serve` 拉起本地网关（默认 `localhost:20128`）、调管理 API 接入免费 provider 并生成本地 key，最后写出 `omni` 命令与配置。终端侧的 `omni chat` 直接走网关的 OpenAI 兼容 `/v1/chat/completions`，自带流式渲染、多轮上下文、本地长记忆检索与上游中断续写。
+
+</details>
 
 ---
 
