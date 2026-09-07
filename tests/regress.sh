@@ -223,6 +223,18 @@ else
   ok "（无 Node，跳过 statfsSync 检查）"
 fi
 
+echo "[7h] CHANGELOG 引用的提交必须真实存在"
+if [ -f CHANGELOG.md ]; then
+  BAD=0
+  for h in $(grep -oE '`[0-9a-f]{7}`' CHANGELOG.md | tr -d '`' | sort -u); do
+    git cat-file -e "$h" 2>/dev/null || { BAD=$((BAD+1)); echo "      不存在的 hash: $h"; }
+  done
+  [ "$BAD" = "0" ] && ok "CHANGELOG 里的 commit hash 全部真实" || no "CHANGELOG 引用了 $BAD 个不存在的 hash"
+  grep -q '提交列表' CHANGELOG.md && ok "CHANGELOG 附了完整提交列表" || no "CHANGELOG 缺提交列表"
+else
+  no "缺少 CHANGELOG.md"
+fi
+
 echo "[8] 真正执行删除的路径（HOME 与 PATH 都隔离，不碰真实环境）"
 D="$(mktemp -d)"; H="$(mktemp -d)"
 mkdir -p "$D/memory"

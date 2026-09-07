@@ -12,6 +12,8 @@
 
 **不想要了**：双击 `uninstall.command`（Windows 是 `uninstall.bat`），它会列出每样东西占多大、删了能不能恢复，你自己勾选；输入 `a` 就是全删。删前会问要不要备份聊天记录，删完不留垃圾——连它当初为了运行而装的 Node.js 都会一起清掉。
 
+每个版本改了什么，见 [CHANGELOG.md](CHANGELOG.md)。
+
 <details>
 <summary><b>技术说明</b>（想知道底层是什么的话点开）</summary>
 
