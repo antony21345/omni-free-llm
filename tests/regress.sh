@@ -150,6 +150,45 @@ else
   ok "（无 expect，跳过 TTY 渲染检查）"
 fi
 
+echo "[7c] 只删自己带来的：空壳文件与空目录该删，有别人内容的要留"
+HA="$(mktemp -d)"; mkdir -p "$HA/.config/configstore"
+printf '\n\n# >>> omni-free-llm >>>\nalias omni=x\n# <<< omni-free-llm <<<\n' > "$HA/.bashrc"
+printf 'export FOO=1\n# >>> omni-free-llm >>>\nalias omni=y\n# <<< omni-free-llm <<<\n' > "$HA/.zshrc"
+printf '{"a":1}\n' > "$HA/.config/configstore/update-notifier-omniroute.json"
+printf 'a\nyes\n\n' | HOME="$HA" PATH=/usr/bin:/bin bash uninstall.sh >/dev/null 2>&1
+[ ! -f "$HA/.bashrc" ] && ok "只有 alias 的空壳文件被删除" || no "空壳文件没被删"
+[ -f "$HA/.zshrc" ] && grep -q 'export FOO=1' "$HA/.zshrc" && ok "有别人内容的文件保留且内容完好" || no "有内容的文件被误删或损坏"
+[ ! -d "$HA/.config/configstore" ] && ok "空的 configstore 目录被删除" || no "空目录没被删"
+[ -d "$HA/.config" ] && ok "~/.config 本身没被碰" || no "~/.config 被误删了！"
+rm -rf "$HA" 2>/dev/null
+
+HB="$(mktemp -d)"; mkdir -p "$HB/.config/configstore"
+printf '{"a":1}\n' > "$HB/.config/configstore/update-notifier-omniroute.json"
+printf '{"o":1}\n' > "$HB/.config/configstore/update-notifier-other.json"
+printf 'a\nyes\n\n' | HOME="$HB" PATH=/usr/bin:/bin bash uninstall.sh >/dev/null 2>&1
+[ -d "$HB/.config/configstore" ] && ok "configstore 有别人记录时保留目录" || no "误删了还有内容的 configstore"
+[ -f "$HB/.config/configstore/update-notifier-other.json" ] && ok "别的工具的记录完好" || no "误删了别的工具的记录"
+[ ! -f "$HB/.config/configstore/update-notifier-omniroute.json" ] && ok "只删掉 omniroute 自己的记录" || no "omniroute 记录没删掉"
+rm -rf "$HB" 2>/dev/null
+
+# alias 段已经被上一次卸载删掉的情况：靠 .omni-bak 作为「安装器动过它」的证据
+HC="$(mktemp -d)"
+printf '\n' > "$HC/.bashrc"
+printf 'export PATH="$HOME/.local/bin:$PATH"\n' > "$HC/.zshrc"
+printf '# >>> omni-free-llm >>>\n' > "$HC/.bashrc.omni-bak"
+printf '# >>> omni-free-llm >>>\n' > "$HC/.zshrc.omni-bak"
+printf 'a\nyes\n\n' | HOME="$HC" PATH=/usr/bin:/bin bash uninstall.sh >/dev/null 2>&1
+[ ! -f "$HC/.bashrc" ] && ok "alias 已删但有 .omni-bak 时仍能清掉空壳" || no "空壳没被清掉（会让用户白跑一趟）"
+[ -f "$HC/.zshrc" ] && ok "同场景下有内容的文件仍保留" || no "有内容的文件被误删"
+rm -rf "$HC" 2>/dev/null
+
+# 无关的空文件：没有任何证据说明是本工具创建的，绝不能删
+HD="$(mktemp -d)"
+printf '\n' > "$HD/.bashrc"
+printf 'a\nyes\n\n' | HOME="$HD" PATH=/usr/bin:/bin bash uninstall.sh >/dev/null 2>&1
+[ -f "$HD/.bashrc" ] && ok "空文件但无 .omni-bak 时不碰（不误删无关文件）" || no "误删了与本工具无关的空文件！"
+rm -rf "$HD" 2>/dev/null
+
 echo "[8] 真正执行删除的路径（HOME 与 PATH 都隔离，不碰真实环境）"
 D="$(mktemp -d)"; H="$(mktemp -d)"
 mkdir -p "$D/memory"

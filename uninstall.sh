@@ -254,10 +254,30 @@ if has 6; then
   echo -e "${B}› 清理 shell alias…${D}"
   for f in "$HOME/.bashrc" "$HOME/.zshrc"; do
     [ -f "$f" ] || continue
-    grep -q '# >>> omni-free-llm >>>' "$f" 2>/dev/null || continue
-    cp "$f" "$f.omni-bak" 2>/dev/null && echo "  已备份 $f → $f.omni-bak"
-    sed -i.omni-tmp '/# >>> omni-free-llm >>>/,/# <<< omni-free-llm <<</d' "$f" 2>/dev/null && rm -f "$f.omni-tmp"
-    echo "  已从 $f 移除 alias 段"
+    HAD_BLOCK=0
+    if grep -q '# >>> omni-free-llm >>>' "$f" 2>/dev/null; then
+      HAD_BLOCK=1
+      cp "$f" "$f.omni-bak" 2>/dev/null && echo "  已备份 $f → $f.omni-bak"
+      sed -i.omni-tmp '/# >>> omni-free-llm >>>/,/# <<< omni-free-llm <<</d' "$f" 2>/dev/null && rm -f "$f.omni-tmp"
+      echo "  已从 $f 移除 alias 段"
+    elif [ ! -f "$f.omni-bak" ]; then
+      # 既没有 alias 段，也没有我们留下的备份 —— 这个文件跟本工具无关，不碰
+      continue
+    fi
+    # 安装器在文件不存在时会直接创建它。删掉 alias 后若一行内容都不剩，
+    # 说明这个文件本来就是安装器带来的空壳，连它一起删；有别人的内容就留着。
+    # grep -c 在无匹配时会输出 0 但退出码为 1，加 "|| echo 0" 会让命令替换变成两行 "0\n0"，
+    # 跟 "0" 比永远不等 —— 直接取值，只在 grep 出错（文件没了）时兜底。
+    NLEFT=$(grep -vcE '^[[:space:]]*$' "$f" 2>/dev/null)
+    NLEFT=${NLEFT:-0}
+    # 空壳才删，而且必须有证据说明安装器动过它（这次删到了 alias 段，或留有 .omni-bak）
+    if [ "$NLEFT" = "0" ] && { [ "$HAD_BLOCK" = "1" ] || [ -f "$f.omni-bak" ]; }; then
+      rm -f "$f" 2>/dev/null && echo "    ↳ $f 已无任何内容，判定为安装器创建，一并删除"
+    elif [ "$NLEFT" = "0" ]; then
+      echo "    ↳ $f 是空的，但没有证据说明是本工具创建的，保留"
+    else
+      echo "    ↳ $f 里还有你自己的配置（${NLEFT} 行），只移除 alias 段，文件保留"
+    fi
   done
 fi
 
@@ -281,6 +301,13 @@ if has 4 || has 3; then
   if [ -f "$CS" ]; then
     echo -e "${B}› 清理更新检查记录…${D}"
     rm -f "$CS" 2>/dev/null && echo "  已删除 $CS"
+    # configstore 目录是 omniroute 依赖的 configstore 包建的；空了就一并删（rmdir 只删空目录，不会误伤）
+    CSDIR="$HOME/.config/configstore"
+    if [ -d "$CSDIR" ] && [ -z "$(ls -A "$CSDIR" 2>/dev/null)" ]; then
+      rmdir "$CSDIR" 2>/dev/null && echo "  configstore 目录已空，一并删除（原本是 omniroute 带来的）"
+    elif [ -d "$CSDIR" ]; then
+      echo "  configstore 目录里还有别的工具的记录（$(ls -A "$CSDIR" | wc -l | tr -d " ") 项），保留"
+    fi
   fi
 fi
 

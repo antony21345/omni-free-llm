@@ -225,6 +225,16 @@ if ((Has 4) -or (Has 3)) {
     if (Test-Path $cs) {
         Write-Host "> 清理更新检查记录…" -ForegroundColor Cyan
         try { Remove-Item $cs -Force -ErrorAction Stop; Write-Host "  已删除 $cs" } catch {}
+        # configstore 目录是 omniroute 依赖的 configstore 包建的；空了就一并删，有别人的记录就留
+        $csDir = Split-Path $cs -Parent
+        if (Test-Path $csDir) {
+            $rest = @(Get-ChildItem $csDir -Force -ErrorAction SilentlyContinue)
+            if ($rest.Count -eq 0) {
+                try { Remove-Item $csDir -Force -ErrorAction Stop; Write-Host "  configstore 目录已空，一并删除（原本是 omniroute 带来的）" } catch {}
+            } else {
+                Write-Host "  configstore 目录里还有别的工具的记录（$($rest.Count) 项），保留"
+            }
+        }
     }
 }
 
