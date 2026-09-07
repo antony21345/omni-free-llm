@@ -211,6 +211,18 @@ echo "[7f] 不让第三方工具的英文交互提示冒出来"
 grep -q 'no-ask' install.sh && ok "install.sh 关掉了 brew 的英文确认提示" || no "brew 会弹英文 y/n 提示"
 grep -q "grep -q -- '--no-ask'" install.sh && ok "先探测再用（兼容老版本 brew）" || no "没做版本探测，老 brew 会报错"
 
+echo "[7g] 安装前的成本告知与空间检查"
+grep -q '2.3GB' install.mjs && ok "选项里标注了实际磁盘占用" || no "没标注磁盘占用"
+grep -q '额外空间 0' install.mjs && ok "说明了三个选项空间相同" || no "没说明三选项空间相同"
+grep -q 'statfsSync' install.mjs && ok "装前检查磁盘空间" || no "没有磁盘空间检查"
+# 必须检查安装目录所在分区，不能查 "/"：macOS 的 / 是只读系统卷，数字会严重误导
+grep -q 'freeGB(DIR)' install.mjs && ok "检查的是安装目录所在分区（不是 /）" || no "检查了错误的分区"
+if [ "$HAVE_NODE" = "1" ]; then
+  node -e 'const fs=require("fs");const st=fs.statfsSync(require("os").homedir());process.exit((st.bavail*st.bsize)>0?0:1)' 2>/dev/null     && ok "statfsSync 在本机可用且返回正数" || no "statfsSync 不可用"
+else
+  ok "（无 Node，跳过 statfsSync 检查）"
+fi
+
 echo "[8] 真正执行删除的路径（HOME 与 PATH 都隔离，不碰真实环境）"
 D="$(mktemp -d)"; H="$(mktemp -d)"
 mkdir -p "$D/memory"

@@ -43,6 +43,11 @@ const FREE_KEYS = [
 // ---- 颜色 ----
 const G = "\x1b[32m", B = "\x1b[36m", Y = "\x1b[33m", R = "\x1b[31m", D = "\x1b[0m", BD = "\x1b[1m";
 
+// 装之前先看磁盘够不够，别写进去 2G 才失败。statfsSync 是 Node 自带的，跨平台。
+const NEED_GB = 3; // omniroute 实测装完约 2.3G，留一点余量
+function freeGB(p) {
+  try { const st = fs.statfsSync(p); return (st.bavail * st.bsize) / 1073741824; } catch { return null; }
+}
 // ---- OS 检测 ----
 function detectOS() {
   const p = process.platform;
@@ -645,11 +650,30 @@ async function main() {
   const DIR = (dirAns || defDir).replace(/\\/g, "/");
   fs.mkdirSync(DIR, { recursive: true });
 
+  const free = freeGB(DIR);
+  if (free != null) {
+    if (free < NEED_GB) {
+      console.log(`${R}⚠ 这个位置可用空间只有 ${free.toFixed(1)}GB，安装大约需要 ${NEED_GB}GB。${D}`);
+      console.log(`  空间不够会装到一半失败，那时已经写进去的文件还得手动清。`);
+      const go = await ask(`  仍然继续？(y/N)：`);
+      if (go.toLowerCase() !== "y") { console.log(`${G}已取消，什么都没装。${D}`); closePrompt(); process.exit(0); }
+    } else {
+      console.log(`${G}✔${D} 可用空间 ${free.toFixed(1)}GB，够用（需要约 ${NEED_GB}GB）`);
+    }
+  }
+
   // ② 匿名 vs 个人 API
   console.log(`\n${BD}${B}② 选择免费来源${D}`);
-  console.log(`  ${G}1${D} 匿名免费池 —— 零注册即用，但易限流、偏慢、模型少`);
-  console.log(`  ${G}2${D} 个人 API   —— 稳定、快、模型全，需花 1 分钟注册（无信用卡）`);
-  console.log(`  ${G}3${D} 两个都要   —— 匿名池兜底 + 个人 API 主力（推荐）`);
+  // 三个选项的磁盘占用其实一样：都要装同一个网关。把共同成本单独讲清楚，
+  // 免得用户以为选「只要匿名池」能省空间。
+  console.log(`  ${Y}注意：三种都要先装 oMNIROUTE 网关 —— 下载约 116MB，装完占约 2.3GB，耗时 5-15 分钟（视网速与磁盘）。${D}`);
+  console.log(`  ${Y}这部分空间和时间是共同的，选哪个都一样，区别只在之后要不要花时间注册 key。${D}\n`);
+  console.log(`  ${G}1${D} 匿名免费池   零注册即用，但易限流、偏慢、模型少`);
+  console.log(`     ${D}└ 额外空间 0 ・ 额外耗时 0（装完直接能聊）`);
+  console.log(`  ${G}2${D} 个人 API     稳定、快、模型全，无需信用卡`);
+  console.log(`     ${D}└ 额外空间 0 ・ 额外耗时 每个 key 约 1-2 分钟（注册+粘贴，可随时跳过）`);
+  console.log(`  ${G}3${D} 两个都要     匿名池兜底 + 个人 API 主力（推荐）`);
+  console.log(`     ${D}└ 额外空间 0 ・ 额外耗时 同上，且可以一个都不填先用匿名池`);
   const mode = await ask(`  选 1/2/3（回车默认 3）：`) || "3";
 
   // 后端
