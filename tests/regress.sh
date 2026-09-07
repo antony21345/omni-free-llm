@@ -227,7 +227,9 @@ echo "[7h] CHANGELOG 引用的提交必须真实存在"
 if [ -f CHANGELOG.md ]; then
   BAD=0
   for h in $(grep -oE '`[0-9a-f]{7}`' CHANGELOG.md | tr -d '`' | sort -u); do
-    git cat-file -e "$h" 2>/dev/null || { BAD=$((BAD+1)); echo "      不存在的 hash: $h"; }
+    # 用 git log 而不是 cat-file：重写历史后旧对象还留在 refs/original 里，
+    # cat-file 照样找得到，会给出假阳性。必须确认 hash 真的在当前分支历史中。
+    git log --format=%h | grep -qx "$h" || { BAD=$((BAD+1)); echo "      不在当前历史中: $h"; }
   done
   [ "$BAD" = "0" ] && ok "CHANGELOG 里的 commit hash 全部真实" || no "CHANGELOG 引用了 $BAD 个不存在的 hash"
   grep -q '提交列表' CHANGELOG.md && ok "CHANGELOG 附了完整提交列表" || no "CHANGELOG 缺提交列表"
