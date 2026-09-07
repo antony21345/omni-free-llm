@@ -89,6 +89,15 @@ A=$(ls -a "$T" | wc -l)
 printf '2 3\nn\nno\n' | bash uninstall.sh "$T" 2>&1 | grep -q "按文件类型列出" && ok "按文件类型提示" || no "类型提示缺失"
 printf '\n' | bash uninstall.sh "$T" 2>&1 | grep -q "已取消" && ok "回车即取消" || no "回车未取消"
 bash uninstall.sh "$HOME" </dev/null 2>&1 | grep -q "拒绝操作" && ok "拒绝对 HOME 动手" || no "危险路径未拦截"
+MENU=$(printf '\n' | bash uninstall.sh "$T" 2>&1)
+echo "$MENU" | grep -q "Node.js" && ok "菜单含 Node 选项" || no "菜单缺 Node 选项"
+echo "$MENU" | grep -q "npm 下载缓存" && ok "菜单含 npm 缓存选项" || no "菜单缺 npm 缓存选项"
+echo "$MENU" | grep -q "Homebrew 本身" && ok "菜单说明 Homebrew 不自动删" || no "缺 Homebrew 说明"
+echo "$MENU" | grep -qE '\$[A-Za-z_]' && no "菜单里有未展开的变量（变量边界问题）" || ok "菜单无未展开变量"
+ALLSEL=$(printf 'a\nn\nno\n' | bash uninstall.sh "$T" 2>&1)
+echo "$ALLSEL" | grep -q "卸载 Node.js" && ok "a 全选时包含 Node" || no "a 全选未包含 Node"
+echo "$ALLSEL" | grep -q "已取消" && ok "a 全选后仍可取消" || no "a 全选后取消失效"
+[ -f "$T/config.json" ] && ok "a 全选取消后文件未动" || no "a 全选取消后文件被删"
 
 echo
 echo "通过 $PASS 项，失败 $FAIL 项"

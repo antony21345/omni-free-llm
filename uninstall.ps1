@@ -36,6 +36,20 @@ try { $nr = (& npm root -g 2>$null); if ($nr -and (Test-Path (Join-Path $nr "omn
 $svc = "未运行"
 try { if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction Stop) { $svc = "运行中" } } catch {}
 
+# Node 怎么装的决定怎么卸：winget 能自动卸，官网 .msi 只能给手工步骤
+$nodeDesc = "未安装"; $nodeWinget = $false; $nodeVer = ""
+if (Get-Command node -ErrorAction SilentlyContinue) {
+    $nodeVer = (& node -v 2>$null)
+    $nodeDesc = "$nodeVer @ " + (Get-Command node).Source
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        $wl = (winget list --id OpenJS.NodeJS 2>$null | Out-String)
+        if ($wl -match "OpenJS.NodeJS") { $nodeWinget = $true }
+    }
+}
+$npmCache = "-"; $npmCachePath = ""
+try { $npmCachePath = (& npm config get cache 2>$null).Trim() } catch {}
+if ($npmCachePath -and (Test-Path $npmCachePath)) { $npmCache = DirSize $npmCachePath }
+
 Write-Host "可以删除的项目（逐项可选）：" -ForegroundColor White
 Write-Host ""
 Write-Host "  1  停止正在运行的服务                当前：$svc" -NoNewline; Write-Host "      可逆，随时能再启动" -ForegroundColor Green
@@ -47,12 +61,20 @@ Write-Host "  4  整个安装目录（含 2、3 和数据库）  $dir  $dirSize"
 Write-Host "  5  全局 npm 包 omniroute             $npmSize" -NoNewline; Write-Host "              可重新安装" -ForegroundColor Green
 Write-Host "  6  omni 命令（omni.cmd + 用户级 PATH 条目）" -NoNewline; Write-Host "      可逆" -ForegroundColor Green
 Write-Host "  7  Docker 容器 omniroute" -NoNewline; Write-Host "                          可逆" -ForegroundColor Green
+if ($nodeWinget) {
+    Write-Host "  8  Node.js（$nodeVer，winget 装的）" -NoNewline; Write-Host "        ! 其它 Node 项目会失效" -ForegroundColor Red
+} elseif ($nodeDesc -ne "未安装") {
+    Write-Host "  8  Node.js（$nodeDesc）" -NoNewline; Write-Host "        不是 winget 装的，只能给你手工步骤" -ForegroundColor Yellow
+} else {
+    Write-Host "  8  Node.js                              （未安装，跳过）"
+}
+Write-Host "  9  npm 下载缓存与日志                    缓存 $npmCache" -NoNewline; Write-Host "        可重新下载" -ForegroundColor Green
 Write-Host ""
 Write-Host "始终不会删除：Node.js、Docker 本身 —— 其它项目可能正在用它们。" -ForegroundColor Green
 Write-Host ""
-$sel = Read-Host "输入要删除的编号，空格分隔（如 2 5）；a=全部；直接回车取消"
+$sel = Read-Host "输入要删除的编号，空格分隔（如 2 5）；a=一键全删（1-9，含 Node）；直接回车取消"
 if ([string]::IsNullOrWhiteSpace($sel)) { Write-Host "已取消，什么都没有改动。" -ForegroundColor Green; Read-Host "按回车退出"; exit 0 }
-if ($sel.Trim().ToLower() -eq "a" -or $sel.Trim().ToLower() -eq "all") { $sel = "1 2 3 4 5 6 7" }
+if ($sel.Trim().ToLower() -eq "a" -or $sel.Trim().ToLower() -eq "all") { $sel = "1 2 3 4 5 6 7 8 9" }
 $picked = @($sel -split '\s+' | Where-Object { $_ })
 function Has($n) { return $picked -contains "$n" }
 
@@ -94,6 +116,11 @@ else {
 if (Has 5) { Write-Host "  - 卸载全局 npm 包 omniroute（$npmSize，之后可重新安装）" }
 if (Has 6) { Write-Host "  - 删除 omni.cmd 并从用户级 PATH 移除安装目录" }
 if (Has 7) { Write-Host "  - 删除 Docker 容器 omniroute（镜像会再问一次）" }
+if (Has 8) {
+    if ($nodeWinget) { Write-Host "  - 卸载 Node.js $nodeVer —— 这台机器上其它依赖 Node 的项目会失效" -ForegroundColor Red }
+    elseif ($nodeDesc -ne "未安装") { Write-Host "  - Node.js 不是 winget 装的，脚本不动它，结束时给你手工步骤" -ForegroundColor Yellow }
+}
+if (Has 9) { Write-Host "  - 清空 npm 下载缓存（$npmCache）与日志" }
 Write-Host ""
 
 if (((Has 2) -or (Has 3) -or (Has 4)) -and ((Test-Path $cfgPath) -or (Test-Path $memDir))) {
@@ -164,6 +191,23 @@ if (Has 6) {
     }
 }
 
+if (Has 9) {
+    Write-Host "> 清理 npm 缓存与日志…" -ForegroundColor Cyan
+    if (Get-Command npm -ErrorAction SilentlyContinue) {
+        cmd /c "npm cache clean --force" 2>$null | Out-Null; Write-Host "  已清空 npm 缓存"
+    }
+    $npmLogs = Join-Path $env:APPDATA "npm-cache\_logs"
+    if (Test-Path $npmLogs) { try { Remove-Item "$npmLogs\*.log" -Force -ErrorAction SilentlyContinue; Write-Host "  已删除 npm 日志" } catch {} }
+}
+
+if ((Has 8) -and $nodeWinget) {
+    Write-Host "> 卸载 Node.js…" -ForegroundColor Cyan
+    winget uninstall --id OpenJS.NodeJS --silent 2>$null | Out-Null
+    winget uninstall --id OpenJS.NodeJS.LTS --silent 2>$null | Out-Null
+    if (Get-Command node -ErrorAction SilentlyContinue) { Write-Host "  [!] node 命令仍在，可能需要重开终端或手动卸载" -ForegroundColor Yellow }
+    else { Write-Host "  已卸载 Node.js" }
+}
+
 if (Has 4) {
     Write-Host "> 删除整个安装目录…" -ForegroundColor Cyan
     if (Test-Path $dir) {
@@ -191,5 +235,13 @@ if ((Has 4) -and ($dir -ne $defDir) -and (Test-Path $defDir)) {
 }
 
 Write-Host ""
-Write-Host "[OK] 完成。Node.js 等公共依赖按设计保留了。" -ForegroundColor Green
+Write-Host "[OK] 完成。" -ForegroundColor Green
+if ((Has 8) -and (-not $nodeWinget) -and ($nodeDesc -ne "未安装")) {
+    Write-Host ""
+    Write-Host "关于 Node.js（不是 winget 装的，脚本没动）"
+    Write-Host "  当前：$nodeDesc"
+    Write-Host "  如果是官网 .msi 装的：设置 > 应用 > 已安装的应用 > 找到 Node.js > 卸载"
+    Write-Host "  或命令行：winget uninstall --id OpenJS.NodeJS"
+    Write-Host "  卸载后残留目录可手动删除：%ProgramFiles%\nodejs 和 %APPDATA%\npm"
+}
 if (Has 6) { Write-Host "提示：重开一个 cmd 窗口，omni 命令才会彻底消失。" -ForegroundColor Yellow }

@@ -27,16 +27,33 @@ MEMDAYS=0; MEMCNT=0; MEMSIZE="-"
 if [ -d "$DIR/memory" ]; then
   MEMDAYS=$(ls "$DIR/memory"/*.md 2>/dev/null | wc -l | tr -d " ")
   MEMCNT=$(grep -o '"id"' "$DIR/memory/index.json" 2>/dev/null | wc -l | tr -d " ")
-  MEMSIZE=$(du -sh "$DIR/memory" 2>/dev/null | cut -f1)
+  MEMSIZE=$(du -sh "$DIR/memory" 2>/dev/null | cut -f1 | tr -d " ")
 fi
-DIRSIZE=$(du -sh "$DIR" 2>/dev/null | cut -f1)
+DIRSIZE=$(du -sh "$DIR" 2>/dev/null | cut -f1 | tr -d " ")
 NPMSIZE="-"
 if command -v npm >/dev/null 2>&1; then
   NR=$(npm root -g 2>/dev/null)
-  [ -n "${NR:-}" ] && [ -d "$NR/omniroute" ] && NPMSIZE=$(du -sh "$NR/omniroute" 2>/dev/null | cut -f1)
+  [ -n "${NR:-}" ] && [ -d "$NR/omniroute" ] && NPMSIZE=$(du -sh "$NR/omniroute" 2>/dev/null | cut -f1 | tr -d " ")
 fi
 SVC="未运行"
 if command -v lsof >/dev/null 2>&1 && [ -n "$(lsof -ti "tcp:$PORT" 2>/dev/null)" ]; then SVC="运行中"; fi
+
+# Node 是不是 brew 装的？只有 brew 装的才能干净卸掉；官网安装包装的只给手工步骤
+NODE_BREW=0; NODE_DESC="未安装"; NODE_SIZE="-"; NODE_WHEN=""
+if command -v node >/dev/null 2>&1; then
+  NODE_DESC="$(node -v 2>/dev/null) @ $(command -v node)"
+  if command -v brew >/dev/null 2>&1 && brew list --formula 2>/dev/null | grep -qx node; then
+    NODE_BREW=1
+    NODE_SIZE=$(du -sh "$(brew --prefix 2>/dev/null)/Cellar/node" 2>/dev/null | cut -f1)
+    # node 自己 + 它拉进来的依赖一起算，才是真实占用
+    NODE_ALL=$( { echo "$(brew --prefix)/Cellar/node"; brew deps node 2>/dev/null | sed "s|^|$(brew --prefix)/Cellar/|"; } | xargs du -sk 2>/dev/null | awk '{t+=$1} END{if(t>1048576) printf "%.1fG", t/1048576; else printf "%.0fM", t/1024}')
+    NODE_WHEN=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$(brew --prefix 2>/dev/null)"/Cellar/node/* 2>/dev/null | head -1)
+    NODE_DEPS=$(brew deps node 2>/dev/null | wc -l | tr -d " ")
+  fi
+fi
+NPM_CACHE="-"; NPM_LOGS="-"
+[ -d "$HOME/.npm/_cacache" ] && NPM_CACHE=$(du -sh "$HOME/.npm/_cacache" 2>/dev/null | cut -f1 | tr -d " ")
+[ -d "$HOME/.npm/_logs" ] && NPM_LOGS="$(ls "$HOME/.npm/_logs"/*.log 2>/dev/null | wc -l | tr -d " ") 个 / $(du -sh "$HOME/.npm/_logs" 2>/dev/null | cut -f1)"
 
 echo -e "${BD}可以删除的项目（逐项可选）：${D}\n"
 echo -e "  ${G}1${D}  停止正在运行的服务                      当前：$SVC          ${G}可逆，随时能再启动${D}"
@@ -54,18 +71,27 @@ echo -e "  ${G}4${D}  整个安装目录（含 2、3 和数据库）        $DIR
 echo -e "  ${G}5${D}  全局 npm 包 omniroute                   $NPMSIZE              ${G}可重新安装${D}"
 echo -e "  ${G}6${D}  shell 里的 omni 命令（alias）                                 ${G}可逆${D}"
 echo -e "  ${G}7${D}  Docker 容器 omniroute                                         ${G}可逆${D}"
+if [ "$NODE_BREW" = "1" ]; then
+  echo -e "  ${G}8${D}  Node.js + ${NODE_DEPS:-0} 个依赖（brew 装于 ${NODE_WHEN}）  ${NODE_ALL:-$NODE_SIZE}   ${R}⚠ 其它 Node 项目会失效${D}"
+elif [ "$NODE_DESC" != "未安装" ]; then
+  echo -e "  ${G}8${D}  Node.js（${NODE_DESC}）                        ${Y}不是 brew 装的，只能给你手工步骤${D}"
+else
+  echo -e "  ${G}8${D}  Node.js                                 （未安装，跳过）"
+fi
+echo -e "  ${G}9${D}  npm 下载缓存与日志                      缓存 $NPM_CACHE / 日志 $NPM_LOGS   ${G}可重新下载${D}"
 echo
-echo -e "${G}始终不会删除：${D}Node.js、Homebrew、Docker 本身 —— 其它项目可能正在用它们。"
+echo -e "${G}脚本不会自动删除：${D}Homebrew 本身 —— 它不是这个安装器装的（装它的时间早得多）。"
+echo -e "  选了 8 之后，卸载 Homebrew 的官方命令会在结束时打印给你，由你决定跑不跑。"
 echo
-read -r -p "输入要删除的编号，空格分隔（如 2 5）；a=全部；直接回车取消：" SEL
+read -r -p "输入要删除的编号，空格分隔（如 2 5）；${BD}a=一键全删（1-9，含 Node）${D}；直接回车取消：" SEL
 [ -z "${SEL:-}" ] && { echo -e "${G}已取消，什么都没有改动。${D}"; exit 0; }
-case "$SEL" in a|A|all|ALL) SEL="1 2 3 4 5 6 7" ;; esac
+case "$SEL" in a|A|all|ALL) SEL="1 2 3 4 5 6 7 8 9" ;; esac
 has() { case " $SEL " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
 # ---- 强提示：把即将删除的具体内容摊开 ----
 echo
 echo -e "${BD}${R}即将执行以下操作：${D}"
-has 1 && echo -e "  • 停止端口 $PORT 上的服务（$SVC）"
+has 1 && echo -e "  • 停止端口 $PORT 上的服务（${SVC}）"
 
 # 按文件类型摊开，让用户清楚每类是什么、有多少
 if has 2 || has 3 || has 4; then
@@ -94,14 +120,22 @@ if has 2 || has 3 || has 4; then
   fi
   echo
 fi
-has 4 && echo -e "  ${R}• 删除整个目录 $DIR（$DIRSIZE）—— 包含对话记忆、API key、管理密码、omniroute 数据库，全部不可恢复${D}"
+has 4 && echo -e "  ${R}• 删除整个目录 ${DIR}（${DIRSIZE}）—— 包含对话记忆、API key、管理密码、omniroute 数据库，全部不可恢复${D}"
 if ! has 4; then
   has 2 && echo -e "  ${R}• 删除 $DIR/memory —— $MEMDAYS 天 / $MEMCNT 条对话记忆，不可恢复${D}"
   has 3 && echo -e "  ${R}• 删除 $DIR/config.json —— 含 API key 与管理密码，不可恢复${D}"
 fi
-has 5 && echo -e "  • 卸载全局 npm 包 omniroute（$NPMSIZE，之后可重新安装）"
+has 5 && echo -e "  • 卸载全局 npm 包 omniroute（${NPMSIZE}，之后可重新安装）"
 has 6 && echo -e "  • 从 ~/.bashrc 与 ~/.zshrc 移除 omni alias（改前会存 .omni-bak）"
 has 7 && echo -e "  • 删除 Docker 容器 omniroute（镜像会再问一次）"
+if has 8; then
+  if [ "$NODE_BREW" = "1" ]; then
+    echo -e "  ${R}• 卸载 Node.js 及其 ${NODE_DEPS:-0} 个 brew 依赖（${NODE_ALL:-$NODE_SIZE}）—— 这台机器上其它依赖 Node 的项目会失效${D}"
+  elif [ "$NODE_DESC" != "未安装" ]; then
+    echo -e "  ${Y}• Node.js 不是 brew 装的，脚本不动它，结束时给你手工步骤${D}"
+  fi
+fi
+has 9 && echo -e "  • 清空 npm 下载缓存（${NPM_CACHE}）与日志（${NPM_LOGS}）"
 echo
 
 # 涉及不可恢复的内容就先问备份
@@ -176,6 +210,27 @@ if has 6; then
   done
 fi
 
+if has 9; then
+  echo -e "${B}› 清理 npm 缓存与日志…${D}"
+  if command -v npm >/dev/null 2>&1; then
+    npm cache clean --force >/dev/null 2>&1 && echo "  已清空 npm 缓存" || echo -e "  ${Y}⚠ npm cache clean 失败${D}"
+  fi
+  if [ -d "$HOME/.npm/_logs" ]; then
+    rm -f "$HOME/.npm/_logs"/*.log 2>/dev/null && echo "  已删除 npm 日志"
+  fi
+fi
+
+if has 8 && [ "$NODE_BREW" = "1" ]; then
+  echo -e "${B}› 卸载 Node.js 及其 brew 依赖…${D}"
+  if [ -n "$(brew uses --installed node 2>/dev/null)" ]; then
+    echo -e "  ${Y}⚠ 还有其它 brew 包依赖 node，已跳过以免连带损坏：${D}"
+    brew uses --installed node 2>/dev/null | sed 's/^/      /'
+  else
+    brew uninstall node >/dev/null 2>&1 && echo "  已卸载 node" || echo -e "  ${Y}⚠ node 卸载失败${D}"
+    brew autoremove >/dev/null 2>&1 && echo "  已用 brew autoremove 清掉不再被依赖的连带包" || true
+  fi
+fi
+
 if has 4; then
   echo -e "${B}› 删除整个安装目录…${D}"
   if [ -d "$DIR" ]; then rm -rf "$DIR" && echo "  已删除 $DIR" || echo -e "  ${R}✖ 删除失败${D}，请手动删除 $DIR"; else echo "  目录不存在"; fi
@@ -202,5 +257,29 @@ if has 4 && [ "$DIR" != "$DEFDIR" ] && [ -d "$DEFDIR" ]; then
 fi
 
 echo
-echo -e "${G}✔ 完成。${D}Node.js 等公共依赖按设计保留了。"
+echo -e "${G}✔ 完成。${D}"
 has 6 && echo -e "${Y}提示：${D}重开终端（或 source ~/.bashrc）后 omni 命令才会彻底消失。"
+
+# Homebrew 本身不是本工具装的，不自动删；把手工步骤打出来由你决定
+if has 8 && command -v brew >/dev/null 2>&1; then
+  LEFT=$(brew list --formula 2>/dev/null | wc -l | tr -d " ")
+  echo
+  echo -e "${BD}关于 Homebrew（脚本刻意不动它）${D}"
+  echo -e "  Homebrew 不是这个安装器装的（装它的时间比本工具早得多），所以不在自动删除范围内。"
+  echo -e "  目前 brew 里还剩 ${LEFT} 个 formula。"
+  if [ "${LEFT:-0}" -eq 0 ]; then
+    echo -e "  已经空了。要连 Homebrew 一起卸掉的话，自己跑这条官方卸载脚本："
+  else
+    echo -e "  ${R}注意：里面还有 ${LEFT} 个包，卸掉 Homebrew 会把它们全部带走。${D}确认无所谓再跑："
+  fi
+  echo -e "    ${B}/bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)\"${D}"
+fi
+if has 8 && [ "$NODE_BREW" != "1" ] && [ "$NODE_DESC" != "未安装" ]; then
+  echo
+  echo -e "${BD}关于 Node.js（不是 brew 装的，脚本没动）${D}"
+  echo -e "  当前：$NODE_DESC"
+  echo -e "  如果是从官网 .pkg 装的，手工删除："
+  echo -e "    ${B}sudo rm -rf /usr/local/lib/node_modules /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx${D}"
+  echo -e "    ${B}sudo pkgutil --forget org.nodejs.pkg${D}"
+  echo -e "  如果是 nvm 装的：${B}nvm uninstall <版本>${D}"
+fi
