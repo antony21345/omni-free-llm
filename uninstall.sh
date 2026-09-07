@@ -83,10 +83,28 @@ echo
 echo -e "${G}脚本不会自动删除：${D}Homebrew 本身 —— 它不是这个安装器装的（装它的时间早得多）。"
 echo -e "  选了 8 之后，卸载 Homebrew 的官方命令会在结束时打印给你，由你决定跑不跑。"
 echo
-read -r -p "输入要删除的编号，空格分隔（如 2 5）；${BD}a=一键全删（1-9，含 Node）${D}；直接回车取消：" SEL
-[ -z "${SEL:-}" ] && { echo -e "${G}已取消，什么都没有改动。${D}"; exit 0; }
-case "$SEL" in a|A|all|ALL) SEL="1 2 3 4 5 6 7 8 9" ;; esac
+read -r -p "输入要删除的编号（如 2 5 或 2,5）；${BD}a=一键全删（1-9，含 Node）${D}；直接回车取消：" SEL
+RAW="${SEL:-}"
+[ -z "$(echo "${SEL:-}" | tr -d ' ')" ] && { echo -e "${G}已取消，什么都没有改动。${D}"; exit 0; }
+# 逗号、全角逗号、顿号、分号都当分隔符 —— 别让分隔符写法不同就静默什么都不做
+SEL=$(echo "$SEL" | tr ',，、;；/' ' ' | tr -s ' ')
+case "$(echo "$SEL" | tr -d ' ')" in a|A|all|ALL) SEL="1 2 3 4 5 6 7 8 9" ;; esac
+# 只保留 1-9，其它一概丢掉
+SEL_OK=""
+for x in $SEL; do
+  case "$x" in [1-9]) SEL_OK="$SEL_OK $x" ;; esac
+done
+SEL=$(echo "$SEL_OK" | tr -s ' ' | sed 's/^ //;s/ $//')
+if [ -z "$SEL" ]; then
+  echo
+  echo -e "${R}✖ 没识别出任何有效编号，什么都没有改动。${D}"
+  echo -e "  你输入的是：「${RAW}」"
+  echo -e "  请输入 ${BD}1 到 9${D} 之间的数字，多个用空格或逗号分隔（例：${BD}2 5${D} 或 ${BD}2,5${D}）；"
+  echo -e "  想全部删除就只输入一个字母 ${BD}a${D}。"
+  exit 1
+fi
 has() { case " $SEL " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+echo -e "\n${B}已识别的编号：${BD}${SEL}${D}"
 
 # ---- 强提示：把即将删除的具体内容摊开 ----
 echo
@@ -264,7 +282,7 @@ if has 4 && [ "$DIR" != "$DEFDIR" ] && [ -d "$DEFDIR" ]; then
 fi
 
 echo
-echo -e "${G}✔ 完成。${D}"
+echo -e "${G}✔ 完成。${D}本次处理的编号：${BD}${SEL}${D}"
 has 6 && echo -e "${Y}提示：${D}重开终端（或 source ~/.bashrc）后 omni 命令才会彻底消失。"
 
 # Homebrew 本身不是本工具装的，不自动删；把手工步骤打出来由你决定

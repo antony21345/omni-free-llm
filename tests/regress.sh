@@ -101,6 +101,27 @@ echo "$ALLSEL" | grep -q "已取消" && ok "a 全选后仍可取消" || no "a �
 printf 'a\nn\ny\n' | bash uninstall.sh "$T" 2>&1 | grep -q "需要完整的小写" && ok "输 y 会提示需要完整 yes" || no "输 y 时没有提示原因"
 [ -f "$T/config.json" ] && ok "输 y 之后文件仍未动" || no "输 y 竟然执行了删除"
 
+echo "[7] 编号输入的各种写法"
+noansi(){ sed $'s/\033\[[0-9;]*m//g'; }
+printf '1,2,3\nn\nno\n' | bash uninstall.sh "$T" 2>&1 | noansi | grep -q "已识别的编号：1 2 3$" && ok "逗号分隔可识别" || no "逗号分隔未识别"
+printf '2、3\nn\nno\n' | bash uninstall.sh "$T" 2>&1 | noansi | grep -q "已识别的编号：2 3$" && ok "顿号分隔可识别" || no "顿号分隔未识别"
+printf 'a\nn\nno\n' | bash uninstall.sh "$T" 2>&1 | noansi | grep -q "已识别的编号：1 2 3 4 5 6 7 8 9$" && ok "a 展开为 1-9" || no "a 未正确展开"
+BADOUT=$(printf 'abc\n' | bash uninstall.sh "$T" 2>&1); BADRC=$?
+echo "$BADOUT" | grep -q "没识别出任何有效编号" && ok "无效输入会明确报错" || no "无效输入被静默接受"
+[ "$BADRC" != "0" ] && ok "无效输入以非零码退出" || no "无效输入却返回成功"
+
+echo "[8] 真正执行删除的路径（HOME 与 PATH 都隔离，不碰真实环境）"
+D="$(mktemp -d)"; H="$(mktemp -d)"
+mkdir -p "$D/memory"
+printf '{"port":20999}\n' > "$D/config.json"
+printf '## x\n\n**问：** a\n' > "$D/memory/2026-01-01.md"
+printf '{"items":[{"id":"x","file":"2026-01-01.md","time":"2026-01-01T00:00:00Z","keywords":["a"],"summary":"a"}]}\n' > "$D/memory/index.json"
+RUN=$(printf 'a\nn\nyes\n' | HOME="$H" PATH=/usr/bin:/bin bash uninstall.sh "$D" 2>&1)
+echo "$RUN" | grep -q "› 删除整个安装目录" && ok "执行时打印了删除明细" || no "执行时没有明细（就是用户遇到的现象）"
+echo "$RUN" | grep -q "本次处理的编号" && ok "结尾汇总了处理的编号" || no "结尾缺少汇总"
+[ ! -d "$D" ] && ok "目标目录确实被删除了" || no "目标目录仍然存在"
+rm -rf "$H" 2>/dev/null
+
 echo
 echo "通过 $PASS 项，失败 $FAIL 项"
 exit $FAIL

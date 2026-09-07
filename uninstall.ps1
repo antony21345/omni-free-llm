@@ -74,8 +74,21 @@ Write-Host "始终不会删除：Node.js、Docker 本身 —— 其它项目可�
 Write-Host ""
 $sel = Read-Host "输入要删除的编号，空格分隔（如 2 5）；a=一键全删（1-9，含 Node）；直接回车取消"
 if ([string]::IsNullOrWhiteSpace($sel)) { Write-Host "已取消，什么都没有改动。" -ForegroundColor Green; Read-Host "按回车退出"; exit 0 }
+$raw = $sel
+# 逗号、全角逗号、顿号、分号都当分隔符，别让分隔符写法不同就静默什么都不做
+$sel = $sel -replace '[,，、;；/]', ' '
 if ($sel.Trim().ToLower() -eq "a" -or $sel.Trim().ToLower() -eq "all") { $sel = "1 2 3 4 5 6 7 8 9" }
-$picked = @($sel -split '\s+' | Where-Object { $_ })
+$picked = @($sel -split '\s+' | Where-Object { $_ -match '^[1-9]$' })
+if ($picked.Count -eq 0) {
+    Write-Host ""
+    Write-Host "X 没识别出任何有效编号，什么都没有改动。" -ForegroundColor Red
+    Write-Host "  你输入的是：「$raw」"
+    Write-Host "  请输入 1 到 9 之间的数字，多个用空格或逗号分隔（例：2 5 或 2,5）；"
+    Write-Host "  想全部删除就只输入一个字母 a。"
+    Read-Host "按回车退出"; exit 1
+}
+Write-Host ""
+Write-Host ("已识别的编号：" + ($picked -join ' ')) -ForegroundColor Cyan
 function Has($n) { return $picked -contains "$n" }
 
 Write-Host ""
@@ -235,7 +248,7 @@ if ((Has 4) -and ($dir -ne $defDir) -and (Test-Path $defDir)) {
 }
 
 Write-Host ""
-Write-Host "[OK] 完成。" -ForegroundColor Green
+Write-Host ("[OK] 完成。本次处理的编号：" + ($picked -join ' ')) -ForegroundColor Green
 if ((Has 8) -and (-not $nodeWinget) -and ($nodeDesc -ne "未安装")) {
     Write-Host ""
     Write-Host "关于 Node.js（不是 winget 装的，脚本没动）"
